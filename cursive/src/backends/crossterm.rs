@@ -45,6 +45,7 @@ type Stdout = File;
 /// Backend using crossterm
 pub struct Backend {
     current_style: Cell<theme::ColorPair>,
+    last_pos: Cell<Option<Vec2>>,
 
     stdout: RefCell<BufWriter<Stdout>>,
 }
@@ -209,6 +210,7 @@ impl Backend {
 
         Ok(Box::new(Backend {
             current_style: Cell::new(theme::ColorPair::from_256colors(0, 0)),
+            last_pos: Cell::new(None),
             stdout,
         }))
     }
@@ -312,12 +314,22 @@ impl backend::Backend for Backend {
     }
 
     fn print_at(&self, pos: Vec2, text: &str) {
+        if let Some(last_pos) = self.last_pos.get() {
+            if pos.x == last_pos.x + 1 {
+                // Print has already advanced the x position,
+                // No need to use MoveTo
+                queue!(self.stdout_mut(), Print(text)).unwrap();
+                self.last_pos.set(Some(pos));
+                return;
+            }
+        }
         queue!(
             self.stdout_mut(),
             MoveTo(pos.x as u16, pos.y as u16),
             Print(text)
         )
         .unwrap();
+        self.last_pos.set(Some(pos));
     }
 
     fn print_at_rep(&self, pos: Vec2, repetitions: usize, text: &str) {
